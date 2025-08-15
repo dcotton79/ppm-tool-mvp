@@ -1,0 +1,31 @@
+{
+  "name": "ppm-tool",
+  "version": "0.6.1",
+  "private": true,
+  "scripts": {
+    "dev": "next dev",
+    "build": "next build",
+    "start": "next start",
+    "prisma:gen": "prisma generate",
+    "prisma:migrate": "prisma migrate dev --name init",
+    "migrate:deploy": "prisma migrate deploy",
+    "seed": "node scripts/seed.cjs",
+    "vercel-build": "prisma generate && prisma migrate deploy"
+  },
+  "dependencies": {
+    "next": "14.2.5",
+    "react": "18.3.1",
+    "react-dom": "18.3.1",
+    "prisma": "5.18.0",
+    "@prisma/client": "5.18.0",
+    "swr": "2.2.5",
+    "@dnd-kit/core": "6.1.0",
+    "@dnd-kit/sortable": "8.0.0",
+    "@dnd-kit/modifiers": "6.0.1",
+    "recharts": "2.12.7",
+    "next-auth": "5.0.0-beta.20"
+  },
+  "devDependencies": {
+    "typescript": "5.5.4"
+  }
+}

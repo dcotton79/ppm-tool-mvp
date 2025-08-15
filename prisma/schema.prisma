@@ -1,0 +1,114 @@
+generator client { provider = "prisma-client-js" }
+datasource db { provider = "postgresql" url = env("DATABASE_URL") }
+
+model Portfolio {
+  id        String   @id @default(cuid())
+  name      String
+  programs  Program[]
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model Program {
+  id          String    @id @default(cuid())
+  name        String
+  portfolioId String
+  portfolio   Portfolio @relation(fields: [portfolioId], references: [id], onDelete: Cascade)
+  projects    Project[]
+}
+
+enum Methodology { WATERFALL AGILE HYBRID }
+
+model Project {
+  id          String       @id @default(cuid())
+  name        String
+  methodology Methodology
+  status      String       @default("PLANNING")
+  start       DateTime
+  finish      DateTime
+  programId   String
+  program     Program      @relation(fields: [programId], references: [id], onDelete: Cascade)
+  tasks       Task[]
+  sprints     Sprint[]
+  backlog     BacklogItem[]
+  prefs       Pref[]
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+}
+
+model Task {
+  id         String   @id @default(cuid())
+  projectId  String
+  project    Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  name       String
+  start      DateTime
+  finish     DateTime
+  duration   Int
+  percent    Int @default(0)
+}
+
+model User {
+  id        String     @id @default(cuid())
+  email     String     @unique
+  name      String?
+  resources Resource[]
+}
+
+model Resource {
+  id      String  @id @default(cuid())
+  name    String
+  role    String
+  userId  String?
+  user    User?   @relation(fields: [userId], references: [id])
+  prefs   Pref[]
+  items   BacklogItem[]
+}
+
+model Sprint {
+  id        String   @id @default(cuid())
+  projectId String
+  project   Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  name      String
+  start     DateTime
+  end       DateTime
+  goal      String?
+  capacitySP Int     @default(0)
+  items     BacklogItem[]
+}
+
+enum BacklogStatus { TODO DOING DONE }
+
+model BacklogItem {
+  id          String        @id @default(cuid())
+  projectId   String
+  project     Project       @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  sprintId    String?
+  sprint      Sprint?       @relation(fields: [sprintId], references: [id])
+  title       String
+  type        String
+  status      BacklogStatus @default(TODO)
+  storyPoints Int           @default(1)
+  doneOn      DateTime?
+  resourceId  String?
+  resource    Resource?     @relation(fields: [resourceId], references: [id])
+  createdAt   DateTime      @default(now())
+  updatedAt   DateTime      @updatedAt
+}
+
+model Pref {
+  id                   String   @id @default(cuid())
+  projectId            String
+  resourceId           String
+  assignee             String   @default("all")
+  onlyMine             Boolean  @default(false)
+  showIdealBurndown    Boolean  @default(true)
+  showMarkersBurndown  Boolean  @default(true)
+  showMarkersBurnup    Boolean  @default(true)
+  createdAt            DateTime @default(now())
+  updatedAt            DateTime @updatedAt
+
+  project    Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  resource   Resource @relation(fields: [resourceId], references: [id], onDelete: Cascade)
+
+  @@unique([projectId, resourceId])
+}
