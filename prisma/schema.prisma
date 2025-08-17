@@ -7,8 +7,604 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
-enum Methodology {
-  WATERFALL
-  AGILE
-  HYBRID
+//// Enums ///////////////////////////////////////////////////////////////
+
+enum Methodology { WATERFALL AGILE HYBRID }
+enum BacklogStatus { TODO DOING DONE }
+enum ChangeStatus { DRAFT SUBMITTED APPROVED REJECTED IMPLEMENTED }
+enum ChangeType { SCOPE SCHEDULE COST RISK OTHER }
+enum RiskStatus { OPEN MITIGATING CLOSED }
+enum RiskSeverity { LOW MEDIUM HIGH CRITICAL }
+enum RiskLikelihood { RARE UNLIKELY POSSIBLE LIKELY ALMOST_CERTAIN }
+enum TimeEntryType { BILLABLE NON_BILLABLE }
+enum AssignmentStatus { PLANNED CONFIRMED RELEASED }
+enum KPITrend { HIGHER_BETTER LOWER_BETTER NEUTRAL }
+enum BenefitType { FINANCIAL NON_FINANCIAL }
+enum BenefitStatus { PLANNED REALIZING REALIZED ON_HOLD CANCELLED }
+enum HealthColor { GREEN YELLOW RED GRAY }
+
+//// Core Org ////////////////////////////////////////////////////////////
+
+model Portfolio {
+  id        String     @id @default(cuid())
+  name      String
+  description String?
+  programs  Program[]
+  projects  Project[]
+  health    PortfolioHealthSnapshot[]
+  createdAt DateTime   @default(now())
+  updatedAt DateTime   @updatedAt
+}
+
+model Program {
+  id          String     @id @default(cuid())
+  name        String
+  description String?
+  portfolioId String
+  portfolio   Portfolio  @relation(fields: [portfolioId], references: [id], onDelete: Cascade)
+  projects    Project[]
+  createdAt   DateTime   @default(now())
+  updatedAt   DateTime   @updatedAt
+
+  @@index([portfolioId])
+}
+
+//// Users & Resources ///////////////////////////////////////////////////
+
+model User {
+  id        String     @id @default(cuid())
+  email     String     @unique
+  name      String?
+  resources Resource[]
+  createdAt DateTime   @default(now())
+  updatedAt DateTime   @updatedAt
+}
+
+model Resource {
+  id                 String      @id @default(cuid())
+  name               String
+  role               String
+  costRatePerHour    Decimal?
+  defaultWeeklyHours Int         @default(40)
+
+  userId String?
+  user   User?       @relation(fields: [userId], references: [id])
+
+  assignments Assignment[]
+  timeEntries TimeEntry[]
+  prefs       Pref[]
+  items       BacklogItem[]
+  okrOwned    Objective[]
+  capacity    ResourceCapacity[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([userId])
+}
+
+//// Projects ////////////////////////////////////////////////////////////
+
+model Project {
+  id            String       @id @default(cuid())
+  code          String?      @unique
+  name          String
+  methodology   Methodology
+  status        String        @default("PLANNING")
+  description   String?
+  start         DateTime
+  finish        DateTime
+
+  programId   String
+  program     Program       @relation(fields: [programId], references: [id], onDelete: Cascade)
+
+  managerId   String?
+  manager     Resource?     @relation(fields: [managerId], references: [id])
+
+  // Work planning
+  tasks       Task[]
+  sprints     Sprint[]
+  backlog     BacklogItem[]
+
+  // Tracking & resourcing
+  timeEntries   TimeEntry[]
+  assignments   Assignment[]
+  forecasts     ResourceForecast[]
+
+  // Governance & controls
+  budgets       ProjectBudget[]
+  costs         ProjectCost[]
+  risks         Risk[]
+  changeReqs    ChangeRequest[]
+  changeLogs    ChangeLog[]
+  baselines     Baseline[]
+  kpis          KPI[]
+
+  // Strategy & value
+  okrs          Objective[]
+  benefits      Benefit[]
+
+  // Reporting
+  health        ProjectHealthSnapshot[]
+
+  // UI prefs
+  prefs         Pref[]
+
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@index([programId])
+  @@index([managerId])
+}
+
+//// Waterfall tasks (Gantt) /////////////////////////////////////////////
+
+model Task {
+  id         String   @id @default(cuid())
+  projectId  String
+  project    Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
+
+  parentId   String?
+  parent     Task?    @relation("TaskToTask", fields: [parentId], references: [id], onDelete: SetNull)
+  children   Task[]   @relation("TaskToTask")
+
+  name       String
+  start      DateTime
+  finish     DateTime
+  percent    Int       @default(0)
+
+  plannedCost Decimal? @db.Decimal(18,2)
+  actualCost  Decimal? @db.Decimal(18,2)
+
+  taskAssignments TaskAssignment[]
+  timeEntries     TimeEntry[]
+
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  @@index([projectId])
+  @@index([parentId])
+}
+
+model TaskAssignment {
+  id         String   @id @default(cuid())
+  taskId     String
+  task       Task     @relation(fields: [taskId], references: [id], onDelete: Cascade)
+
+  resourceId String
+  resource   Resource @relation(fields: [resourceId], references: [id], onDelete: Cascade)
+
+  allocationPct Int    @default(100)
+
+  @@unique([taskId, resourceId])
+  @@index([resourceId])
+}
+
+//// Agile (Sprints & Backlog) ///////////////////////////////////////////
+
+model Sprint {
+  id         String   @id @default(cuid())
+  projectId  String
+  project    Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
+
+  name       String
+  start      DateTime
+  end        DateTime
+  goal       String?
+  capacitySP Int      @default(0)
+
+  items      BacklogItem[]
+
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  @@index([projectId])
+}
+
+model BacklogItem {
+  id          String        @id @default(cuid())
+  projectId   String
+  project     Project       @relation(fields: [projectId], references: [id], onDelete: Cascade)
+
+  sprintId    String?
+  sprint      Sprint?       @relation(fields: [sprintId], references: [id], onDelete: SetNull)
+
+  title       String
+  type        String
+  status      BacklogStatus @default(TODO)
+  storyPoints Int           @default(1)
+
+  doneOn      DateTime?
+
+  resourceId  String?
+  resource    Resource?     @relation(fields: [resourceId], references: [id], onDelete: SetNull)
+
+  timeEntries TimeEntry[]
+
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@index([projectId])
+  @@index([sprintId])
+  @@index([resourceId])
+}
+
+//// Time tracking, capacity & assignments ///////////////////////////////
+
+model TimeEntry {
+  id            String       @id @default(cuid())
+  projectId     String
+  project       Project      @relation(fields: [projectId], references: [id], onDelete: Cascade)
+
+  resourceId    String
+  resource      Resource     @relation(fields: [resourceId], references: [id], onDelete: Cascade)
+
+  date          DateTime
+  hours         Decimal       @db.Decimal(6,2)
+  type          TimeEntryType @default(NON_BILLABLE)
+  notes         String?
+
+  taskId        String?
+  task          Task?        @relation(fields: [taskId], references: [id], onDelete: SetNull)
+
+  backlogItemId String?
+  backlogItem   BacklogItem? @relation(fields: [backlogItemId], references: [id], onDelete: SetNull)
+
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  @@index([projectId, resourceId, date])
+  @@index([taskId])
+  @@index([backlogItemId])
+}
+
+model Assignment {
+  id            String           @id @default(cuid())
+  projectId     String
+  project       Project          @relation(fields: [projectId], references: [id], onDelete: Cascade)
+
+  resourceId    String
+  resource      Resource         @relation(fields: [resourceId], references: [id], onDelete: Cascade)
+
+  status        AssignmentStatus @default(PLANNED)
+  start         DateTime
+  end           DateTime
+  allocationPct Int              @default(50)
+  forecastHours Decimal?         @db.Decimal(8,2)
+
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  @@unique([projectId, resourceId, start, end])
+  @@index([resourceId])
+}
+
+model ResourceCapacity {
+  id          String   @id @default(cuid())
+  resourceId  String
+  resource    Resource @relation(fields: [resourceId], references: [id], onDelete: Cascade)
+
+  weekStart   DateTime
+  hours       Int @default(40)
+
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@unique([resourceId, weekStart])
+  @@index([resourceId])
+}
+
+model ResourceForecast {
+  id          String   @id @default(cuid())
+  projectId   String
+  project     Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
+
+  resourceId  String
+  resource    Resource @relation(fields: [resourceId], references: [id], onDelete: Cascade)
+
+  weekStart   DateTime
+  hours       Decimal  @db.Decimal(6,2)
+
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@unique([projectId, resourceId, weekStart])
+  @@index([resourceId])
+}
+
+//// Cost management & risk contingency //////////////////////////////////
+
+model ProjectBudget {
+  id                String   @id @default(cuid())
+  projectId         String
+  project           Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
+
+  name              String   @default("Baseline")
+  baselineId        String?
+  baseline          Baseline? @relation(fields: [baselineId], references: [id], onDelete: SetNull)
+
+  totalPlanned      Decimal  @db.Decimal(18,2)
+  managementReserve Decimal  @db.Decimal(18,2) @default(0)
+  contingencyPool   Decimal  @db.Decimal(18,2) @default(0)
+
+  currency          String   @default("USD")
+  asOf              DateTime @default(now())
+
+  costs             ProjectCost[]
+  risks             Risk[]
+
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+
+  @@index([projectId])
+  @@index([baselineId])
+}
+
+model ProjectCost {
+  id            String   @id @default(cuid())
+  projectId     String
+  project       Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
+
+  budgetId      String?
+  budget        ProjectBudget? @relation(fields: [budgetId], references: [id], onDelete: SetNull)
+
+  description   String
+  category      String?
+  planned       Decimal? @db.Decimal(18,2)
+  actual        Decimal? @db.Decimal(18,2)
+  currency      String   @default("USD")
+
+  relatesToRiskId String?
+  relatesToRisk   Risk?   @relation(fields: [relatesToRiskId], references: [id], onDelete: SetNull)
+
+  asOf          DateTime @default(now())
+
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  @@index([projectId])
+  @@index([budgetId])
+  @@index([relatesToRiskId])
+}
+
+model Risk {
+  id                  String         @id @default(cuid())
+  projectId           String
+  project             Project        @relation(fields: [projectId], references: [id], onDelete: Cascade)
+
+  budgetId            String?
+  budget              ProjectBudget? @relation(fields: [budgetId], references: [id], onDelete: SetNull)
+
+  title               String
+  description         String?
+  status              RiskStatus     @default(OPEN)
+  ownerId             String?
+  owner               Resource?      @relation(fields: [ownerId], references: [id], onDelete: SetNull)
+
+  severity            RiskSeverity   @default(MEDIUM)
+  likelihood          RiskLikelihood @default(POSSIBLE)
+
+  impactCostLow        Decimal? @db.Decimal(18,2)
+  impactCostMostLikely Decimal? @db.Decimal(18,2)
+  impactCostHigh       Decimal? @db.Decimal(18,2)
+
+  contingencyReserved  Decimal? @db.Decimal(18,2)
+  contingencySpent     Decimal? @db.Decimal(18,2)
+
+  mitigation          String?
+  targetDate          DateTime?
+
+  relatedCosts        ProjectCost[]
+
+  createdAt           DateTime @default(now())
+  updatedAt           DateTime @updatedAt
+
+  @@index([projectId])
+  @@index([budgetId])
+  @@index([ownerId])
+}
+
+//// Change control & re-baselining //////////////////////////////////////
+
+model ChangeRequest {
+  id            String       @id @default(cuid())
+  projectId     String
+  project       Project      @relation(fields: [projectId], references: [id], onDelete: Cascade)
+
+  title         String
+  type          ChangeType   @default(OTHER)
+  description   String?
+  status        ChangeStatus @default(DRAFT)
+
+  submittedById String?
+  submittedBy   Resource?    @relation("ChangeSubmittedBy", fields: [submittedById], references: [id], onDelete: SetNull)
+
+  decidedById   String?
+  decidedBy     Resource?    @relation("ChangeDecidedBy", fields: [decidedById], references: [id], onDelete: SetNull)
+
+  decisionDate  DateTime?
+
+  impactCostDelta     Decimal? @db.Decimal(18,2)
+  impactScheduleDays  Int?
+  impactScopeStoryPts Int?
+
+  logs          ChangeLog[]
+
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  @@index([projectId])
+}
+
+model ChangeLog {
+  id              String   @id @default(cuid())
+  projectId       String
+  project         Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
+
+  changeRequestId String
+  changeRequest   ChangeRequest @relation(fields: [changeRequestId], references: [id], onDelete: Cascade)
+
+  field           String
+  before          String?
+  after           String?
+  changedAt       DateTime @default(now())
+
+  @@index([projectId])
+  @@index([changeRequestId])
+}
+
+model Baseline {
+  id         String   @id @default(cuid())
+  projectId  String
+  project    Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
+
+  name       String   @default("Baseline")
+  notes      String?
+  asOf       DateTime @default(now())
+
+  kpis       KPI[]
+  budgets    ProjectBudget[]
+
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  @@index([projectId])
+}
+
+model KPI {
+  id          String   @id @default(cuid())
+  projectId   String
+  project     Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
+
+  baselineId  String?
+  baseline    Baseline? @relation(fields: [baselineId], references: [id], onDelete: SetNull)
+
+  name        String
+  unit        String?
+  value       Decimal   @db.Decimal(18,4)
+  target      Decimal?  @db.Decimal(18,4)
+  trend       KPITrend  @default(NEUTRAL)
+  asOf        DateTime  @default(now())
+
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@index([projectId])
+  @@index([baselineId])
+}
+
+//// Strategy (OKRs) & Benefits /////////////////////////////////////////
+
+model Objective {
+  id         String   @id @default(cuid())
+  projectId  String
+  project    Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
+
+  title      String
+  ownerId    String?
+  owner      Resource? @relation(fields: [ownerId], references: [id], onDelete: SetNull)
+
+  start      DateTime
+  end        DateTime
+  status     String?
+
+  keyResults KeyResult[]
+
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  @@index([projectId])
+  @@index([ownerId])
+}
+
+model KeyResult {
+  id           String     @id @default(cuid())
+  objectiveId  String
+  objective    Objective  @relation(fields: [objectiveId], references: [id], onDelete: Cascade)
+
+  title        String
+  unit         String?
+  current      Decimal    @db.Decimal(18,4) @default(0)
+  target       Decimal    @db.Decimal(18,4)
+  confidence   Int?
+  status       String?
+
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  @@index([objectiveId])
+}
+
+model Benefit {
+  id                String        @id @default(cuid())
+  projectId         String
+  project           Project       @relation(fields: [projectId], references: [id], onDelete: Cascade)
+
+  name              String
+  type              BenefitType   @default(FINANCIAL)
+  unit              String?
+  plannedValue      Decimal?      @db.Decimal(18,4)
+  actualValue       Decimal?      @db.Decimal(18,4)
+
+  startRealization  DateTime?
+  endRealization    DateTime?
+  status            BenefitStatus @default(PLANNED)
+
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+
+  @@index([projectId])
+}
+
+//// Health reporting /////////////////////////////////////////////////////
+
+model ProjectHealthSnapshot {
+  id         String      @id @default(cuid())
+  projectId  String
+  project    Project     @relation(fields: [projectId], references: [id], onDelete: Cascade)
+
+  date       DateTime    @default(now())
+  scope      HealthColor @default(GREEN)
+  schedule   HealthColor @default(GREEN)
+  cost       HealthColor @default(GREEN)
+  resources  HealthColor @default(GREEN)
+  overall    HealthColor @default(GREEN)
+  summary    String?
+
+  @@index([projectId, date])
+}
+
+model PortfolioHealthSnapshot {
+  id         String      @id @default(cuid())
+  portfolioId String
+  portfolio  Portfolio   @relation(fields: [portfolioId], references: [id], onDelete: Cascade)
+
+  date       DateTime    @default(now())
+  overall    HealthColor @default(GREEN)
+  summary    String?
+
+  @@index([portfolioId, date])
+}
+
+//// UI Preferences (per user per project) ///////////////////////////////
+
+model Pref {
+  id                   String   @id @default(cuid())
+  projectId            String
+  project              Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
+
+  resourceId           String
+  resource             Resource @relation(fields: [resourceId], references: [id], onDelete: Cascade)
+
+  assignee             String   @default("all")
+  onlyMine             Boolean  @default(false)
+  showIdealBurndown    Boolean  @default(true)
+  showMarkersBurndown  Boolean  @default(true)
+  showMarkersBurnup    Boolean  @default(true)
+
+  createdAt            DateTime @default(now())
+  updatedAt            DateTime @updatedAt
+
+  @@unique([projectId, resourceId])
+  @@index([resourceId])
 }
