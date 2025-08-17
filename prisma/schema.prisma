@@ -9,19 +9,91 @@ datasource db {
 
 //// Enums ///////////////////////////////////////////////////////////////
 
-enum Methodology { WATERFALL AGILE HYBRID }
-enum BacklogStatus { TODO DOING DONE }
-enum ChangeStatus { DRAFT SUBMITTED APPROVED REJECTED IMPLEMENTED }
-enum ChangeType { SCOPE SCHEDULE COST RISK OTHER }
-enum RiskStatus { OPEN MITIGATING CLOSED }
-enum RiskSeverity { LOW MEDIUM HIGH CRITICAL }
-enum RiskLikelihood { RARE UNLIKELY POSSIBLE LIKELY ALMOST_CERTAIN }
-enum TimeEntryType { BILLABLE NON_BILLABLE }
-enum AssignmentStatus { PLANNED CONFIRMED RELEASED }
-enum KPITrend { HIGHER_BETTER LOWER_BETTER NEUTRAL }
-enum BenefitType { FINANCIAL NON_FINANCIAL }
-enum BenefitStatus { PLANNED REALIZING REALIZED ON_HOLD CANCELLED }
-enum HealthColor { GREEN YELLOW RED GRAY }
+enum Methodology { 
+  WATERFALL
+  AGILE
+  HYBRID
+}
+
+enum BacklogStatus { 
+  TODO
+  DOING
+  DONE
+}
+
+enum ChangeStatus { 
+  DRAFT
+  SUBMITTED
+  APPROVED
+  REJECTED
+  IMPLEMENTED
+}
+
+enum ChangeType { 
+  SCOPE
+  SCHEDULE
+  COST
+  RISK
+  OTHER
+}
+
+enum RiskStatus { 
+  OPEN
+  MITIGATING
+  CLOSED
+}
+
+enum RiskSeverity { 
+  LOW
+  MEDIUM
+  HIGH
+  CRITICAL
+}
+
+enum RiskLikelihood { 
+  RARE
+  UNLIKELY
+  POSSIBLE
+  LIKELY
+  ALMOST_CERTAIN
+}
+
+enum TimeEntryType { 
+  BILLABLE
+  NON_BILLABLE
+}
+
+enum AssignmentStatus { 
+  PLANNED
+  CONFIRMED
+  RELEASED
+}
+
+enum KPITrend { 
+  HIGHER_BETTER
+  LOWER_BETTER
+  NEUTRAL
+}
+
+enum BenefitType { 
+  FINANCIAL
+  NON_FINANCIAL
+}
+
+enum BenefitStatus { 
+  PLANNED
+  REALIZING
+  REALIZED
+  ON_HOLD
+  CANCELLED
+}
+
+enum HealthColor { 
+  GREEN
+  YELLOW
+  RED
+  GRAY
+}
 
 //// Core Org ////////////////////////////////////////////////////////////
 
@@ -101,14 +173,17 @@ model Project {
   managerId   String?
   manager     Resource?     @relation(fields: [managerId], references: [id])
 
+  // Work planning
   tasks       Task[]
   sprints     Sprint[]
   backlog     BacklogItem[]
 
+  // Tracking & resourcing
   timeEntries   TimeEntry[]
   assignments   Assignment[]
   forecasts     ResourceForecast[]
 
+  // Governance & controls
   budgets       ProjectBudget[]
   costs         ProjectCost[]
   risks         Risk[]
@@ -117,11 +192,14 @@ model Project {
   baselines     Baseline[]
   kpis          KPI[]
 
+  // Strategy & value
   okrs          Objective[]
   benefits      Benefit[]
 
+  // Reporting
   health        ProjectHealthSnapshot[]
 
+  // UI prefs
   prefs         Pref[]
 
   createdAt   DateTime @default(now())
